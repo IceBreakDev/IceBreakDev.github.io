@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>icebreak.dev</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Raleway:wght@200;300&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ice-blue: #a8edea;
+            --ice-bright: #c9f4ff;
+            --bg: #010a10;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'Share Tech Mono', monospace;
+            color: #e8f4f8;
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+        }
+
+        #bg-canvas {
+            z-index: 0;
+        }
+
+        #ice-canvas {
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* strong dark vignette to always protect text readability */
+        .vignette {
+            position: fixed;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background:
+                radial-gradient(ellipse 70% 60% at 50% 50%, rgba(1, 10, 16, 0.0) 20%, rgba(1, 10, 16, 0.82) 100%),
+                linear-gradient(to bottom, rgba(1, 10, 16, 0.55) 0%, transparent 20%, transparent 80%, rgba(1, 10, 16, 0.55) 100%);
+        }
+
+        /* subtle scanlines — very faint */
+        .grain {
+            position: fixed;
+            inset: 0;
+            z-index: 3;
+            pointer-events: none;
+            opacity: 0.018;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 2px,
+                    rgba(168, 237, 234, 1) 2px, rgba(168, 237, 234, 1) 3px);
+        }
+
+        .content {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2.6rem;
+            padding: 2rem;
+        }
+
+        .headline-wrap {
+            opacity: 0;
+            animation: fadeUp 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.5s;
+        }
+
+        .headline {
+            font-family: 'Raleway', sans-serif;
+            font-weight: 200;
+            font-size: clamp(1rem, 2.6vw, 1.65rem);
+            letter-spacing: 0.22em;
+            text-transform: lowercase;
+            min-height: 2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: rgba(232, 244, 248, 0.96);
+            text-shadow: 0 0 30px rgba(1, 10, 16, 0.9), 0 2px 12px rgba(1, 10, 16, 0.95);
+        }
+
+        #typed-text .ice {
+            color: var(--ice-blue);
+            text-shadow: 0 0 16px rgba(168, 237, 234, 0.5), 0 0 40px rgba(168, 237, 234, 0.15), 0 0 2px rgba(1, 10, 16, 0.8);
+        }
+
+        .type-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.1em;
+            background: var(--ice-blue);
+            margin-left: 3px;
+            vertical-align: middle;
+            animation: blink 0.9s step-end infinite;
+            box-shadow: 0 0 6px rgba(168, 237, 234, 0.7);
+        }
+
+        .terminal-block {
+            opacity: 0;
+            animation: fadeUp 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards 1.4s;
+        }
+
+        .terminal-line {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: clamp(0.7rem, 1.3vw, 0.88rem);
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+        }
+
+        .t-user {
+            color: rgba(168, 237, 234, 0.7);
+        }
+
+        .t-at {
+            color: rgba(168, 237, 234, 0.28);
+        }
+
+        .t-host {
+            color: rgba(125, 212, 232, 0.58);
+        }
+
+        .t-colon {
+            color: rgba(168, 237, 234, 0.28);
+        }
+
+        .t-path {
+            color: rgba(168, 237, 234, 0.45);
+        }
+
+        .t-hash {
+            color: rgba(168, 237, 234, 0.38);
+            margin: 0 0.5em;
+        }
+
+        .block-cursor {
+            display: inline-block;
+            width: 0.52em;
+            height: 0.88em;
+            background: rgba(168, 237, 234, 0.55);
+            vertical-align: middle;
+            animation: blink 1.1s step-end infinite;
+            box-shadow: 0 0 6px rgba(168, 237, 234, 0.5);
+        }
+
+        .frost-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            z-index: 20;
+            background: linear-gradient(90deg, transparent, rgba(168, 237, 234, 0.3) 40%, rgba(200, 244, 255, 0.4) 50%, rgba(168, 237, 234, 0.3) 60%, transparent);
+        }
+
+        .frost-line-bottom {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            z-index: 20;
+            background: linear-gradient(90deg, transparent, rgba(168, 237, 234, 0.08), transparent);
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="frost-line"></div>
+    <div class="frost-line-bottom"></div>
+    <canvas id="bg-canvas"></canvas>
+    <canvas id="ice-canvas"></canvas>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+
+    <div class="content">
+        <div class="headline-wrap">
+            <div class="headline">
+                <span id="typed-text"></span><span class="type-cursor"></span>
+            </div>
+        </div>
+        <div class="terminal-block">
+            <div class="terminal-line">
+                <span class="t-user">root</span><span class="t-at">@</span><span class="t-host">icebreak.dev</span><span
+                    class="t-colon">:</span><span class="t-path">~</span><span class="t-hash">#</span><span
+                    class="block-cursor"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════
+        // BG: aurora bands + minimal star field — perf-optimised
+        // Redraws full bg only every 2 frames; stars on same pass
+        // ═══════════════════════════════════════════════════════
+        (function () {
+            const canvas = document.getElementById('bg-canvas');
+            const ctx = canvas.getContext('2d');
+            let W, H, stars;
+            let frame = 0;
+
+            function resize() {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+                initStars();
+            }
+
+            function initStars() {
+                // fewer stars — one per ~6000px²
+                const n = Math.floor(W * H / 6000);
+                stars = Array.from({ length: n }, () => ({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    r: Math.random() * 0.8 + 0.15,
+                    a: Math.random() * 0.28 + 0.04,
+                    tw: Math.random() * Math.PI * 2,
+                    ts: 0.007 + Math.random() * 0.012,
+                }));
+            }
+
+            // Pre-bake aurora gradient — only rebuild on resize
+            let auroraGrads = [];
+            function buildAurora() {
+                auroraGrads = [
+                    { y: 0.06, h: 0.36, hue: 192, alpha: 0.022, spd: 0.00016, ph: 0.0 },
+                    { y: 0.60, h: 0.28, hue: 185, alpha: 0.014, spd: 0.00019, ph: 2.8 },
+                ];
+            }
+
+            resize();
+            buildAurora();
+            window.addEventListener('resize', () => { resize(); buildAurora(); });
+
+            let t = 0;
+            function tick() {
+                t++; frame++;
+                // skip bg redraw every other frame to halve GPU load
+                if (frame % 2 === 0) {
+                    ctx.fillStyle = '#010a10';
+                    ctx.fillRect(0, 0, W, H);
+
+                    auroraGrads.forEach(b => {
+                        const wave = Math.sin(t * b.spd * 1000 + b.ph) * 0.03;
+                        const g = ctx.createLinearGradient(0, (b.y + wave) * H, 0, (b.y + b.h + wave) * H);
+                        g.addColorStop(0, 'transparent');
+                        g.addColorStop(0.45, `hsla(${b.hue},75%,60%,${b.alpha})`);
+                        g.addColorStop(1, 'transparent');
+                        ctx.fillStyle = g;
+                        ctx.fillRect(0, 0, W, H);
+                    });
+
+                    // stars
+                    stars.forEach(s => {
+                        s.tw += s.ts;
+                        const a = s.a * (0.4 + 0.6 * Math.sin(s.tw));
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                        ctx.fillStyle = `rgba(190,240,255,${a})`;
+                        ctx.fill();
+                    });
+                }
+
+                requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        })();
+
+
+        // ═══════════════════════════════════════════════════════
+        // ICE BREAKING — cracks first, shards secondary, no ripples
+        // Object pool + max concurrent breaks cap for perf
+        // ═══════════════════════════════════════════════════════
+        (function () {
+            const canvas = document.getElementById('ice-canvas');
+            const ctx = canvas.getContext('2d');
+            let W, H;
+
+            function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+            resize();
+            window.addEventListener('resize', resize);
+
+            const PALS = [
+                [168, 237, 234], [190, 242, 250], [125, 212, 232], [220, 248, 255], [140, 215, 228]
+            ];
+            function rCol() { const p = PALS[Math.floor(Math.random() * PALS.length)]; return `rgba(${p[0]},${p[1]},${p[2]},`; }
+
+            // ── Shard (lightweight — fewer, simpler) ──
+            class Shard {
+                constructor(x, y, angle, speed, size) {
+                    this.x = x; this.y = y;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.rot = Math.random() * Math.PI * 2;
+                    this.rotV = (Math.random() - 0.5) * 0.15;
+                    this.alpha = 0.55 + Math.random() * 0.3;
+                    this.decay = 0.010 + Math.random() * 0.014;
+                    this.col = rCol();
+                    // simple triangle
+                    const s = size;
+                    this.pts = [
+                        [0, -s], [s * 0.8, s * 0.6], [-s * 0.8, s * 0.6]
+                    ];
+                }
+                update() {
+                    this.x += this.vx; this.y += this.vy;
+                    this.vy += 0.05; this.rot += this.rotV;
+                    this.alpha -= this.decay;
+                }
+                draw(ctx) {
+                    if (this.alpha <= 0) return;
+                    ctx.save();
+                    ctx.translate(this.x, this.y); ctx.rotate(this.rot);
+                    ctx.globalAlpha = Math.max(0, this.alpha);
+                    ctx.beginPath();
+                    this.pts.forEach(([px, py], i) => i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py));
+                    ctx.closePath();
+                    ctx.fillStyle = this.col + '0.08)';
+                    ctx.fill();
+                    ctx.strokeStyle = this.col + '0.8)';
+                    ctx.lineWidth = 0.6;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                isDead() { return this.alpha <= 0; }
+            }
+
+            // ── CrackBranch — 3-pass draw but dimmer ──
+            class CrackBranch {
+                constructor(x, y, angle, depth, speed, maxDepth) {
+                    this.x = x; this.y = y;
+                    this.angle = angle;
+                    this.depth = depth;
+                    this.speed = speed;
+                    this.maxD = maxDepth;
+                    this.len = 0;
+                    this.maxLen = (20 + Math.random() * 50) * Math.max(0.3, 1 - depth * 0.14 / maxDepth);
+                    this.w = Math.max(0.1, 2.0 - depth * 0.28);
+                    this.col = rCol();
+                    this.alpha = 0;
+                    this.tAlpha = Math.max(0.06, (0.6 - depth * 0.09));
+                    this.children = [];
+                    this.done = false;
+                    this.spawned = false;
+                    this.wobble = (Math.random() - 0.5) * 0.028;
+                }
+                get ex() { return this.x + Math.cos(this.angle) * this.len; }
+                get ey() { return this.y + Math.sin(this.angle) * this.len; }
+
+                update(shards) {
+                    if (!this.done) {
+                        this.len = Math.min(this.len + this.speed, this.maxLen);
+                        this.angle += this.wobble;
+                        this.alpha = Math.min(this.alpha + 0.09, this.tAlpha);
+
+                        if (this.len >= this.maxLen && !this.spawned) {
+                            this.spawned = true;
+                            if (this.depth < this.maxD) {
+                                const n = Math.random() < 0.35 ? 3 : 2;
+                                const sp = 0.25 + Math.random() * 0.55;
+                                for (let i = 0; i < n; i++) {
+                                    this.children.push(new CrackBranch(
+                                        this.ex, this.ey,
+                                        this.angle + (Math.random() - 0.5) * sp * 2,
+                                        this.depth + 1,
+                                        this.speed * (0.62 + Math.random() * 0.36),
+                                        this.maxD
+                                    ));
+                                }
+                            } else {
+                                // tip: 1-2 small shards only
+                                const ns = 1 + Math.floor(Math.random() * 2);
+                                for (let i = 0; i < ns; i++) {
+                                    shards.push(new Shard(
+                                        this.ex, this.ey,
+                                        this.angle + (Math.random() - 0.5) * 1.2,
+                                        0.5 + Math.random() * 2.2,
+                                        2 + Math.random() * 5
+                                    ));
+                                }
+                            }
+                            this.done = true;
+                        }
+                    }
+                    this.children.forEach(c => c.update(shards));
+                }
+
+                draw(ctx) {
+                    if (this.len < 0.5) return;
+                    // outer soft glow (dim)
+                    ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.ex, this.ey);
+                    ctx.strokeStyle = this.col + (this.alpha * 0.06) + ')';
+                    ctx.lineWidth = this.w + 5;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                    // core crack
+                    ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.ex, this.ey);
+                    ctx.strokeStyle = this.col + (this.alpha * 0.7) + ')';
+                    ctx.lineWidth = this.w;
+                    ctx.stroke();
+                    // thin bright centre
+                    ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.ex, this.ey);
+                    ctx.strokeStyle = `rgba(230,250,255,${this.alpha * 0.28})`;
+                    ctx.lineWidth = Math.max(0.1, this.w * 0.28);
+                    ctx.stroke();
+
+                    this.children.forEach(c => c.draw(ctx));
+                }
+                isFullyDone() { return this.done && this.children.every(c => c.isFullyDone()); }
+            }
+
+            // ── IceBreak event ──
+            const MAX_CONCURRENT = 3; // hard cap — never stack more than 3 at once
+
+            class IceBreak {
+                constructor() {
+                    this.ox = W * (0.18 + Math.random() * 0.64);
+                    this.oy = H * (0.18 + Math.random() * 0.64);
+                    this.shards = [];
+
+                    const numRoots = 4 + Math.floor(Math.random() * 5);
+                    const maxDepth = 4 + Math.floor(Math.random() * 3);
+                    this.roots = Array.from({ length: numRoots }, (_, i) =>
+                        new CrackBranch(
+                            this.ox, this.oy,
+                            (Math.PI * 2 / numRoots) * i + (Math.random() - 0.5) * 0.65,
+                            0, 1.8 + Math.random() * 1.8, maxDepth
+                        )
+                    );
+                    // fewer burst shards
+                    const ns = 4 + Math.floor(Math.random() * 5);
+                    for (let i = 0; i < ns; i++) {
+                        const a = (Math.PI * 2 / ns) * i + (Math.random() - 0.5) * 0.5;
+                        this.shards.push(new Shard(this.ox, this.oy, a, 1.0 + Math.random() * 3.0, 2 + Math.random() * 7));
+                    }
+
+                    this.age = 0;
+                    this.fadeOut = 0;
+                    this.life = 160 + Math.floor(Math.random() * 180);
+                    this.flash = 1.0;
+                }
+
+                update() {
+                    this.age++;
+                    this.flash = Math.max(0, this.flash - 0.06);
+                    this.roots.forEach(r => r.update(this.shards));
+                    this.shards.forEach(s => s.update());
+                    this.shards = this.shards.filter(s => !s.isDead());
+                    if (this.age > this.life) this.fadeOut += 0.009;
+                }
+
+                draw(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, 1 - this.fadeOut);
+
+                    // impact flash — dimmer than before
+                    if (this.flash > 0) {
+                        const g = ctx.createRadialGradient(this.ox, this.oy, 0, this.ox, this.oy, 80 * this.flash);
+                        g.addColorStop(0, `rgba(200,245,255,${this.flash * 0.16})`);
+                        g.addColorStop(0.4, `rgba(168,237,234,${this.flash * 0.05})`);
+                        g.addColorStop(1, 'transparent');
+                        ctx.fillStyle = g;
+                        ctx.beginPath();
+                        ctx.arc(this.ox, this.oy, 80 * this.flash, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    this.roots.forEach(r => r.draw(ctx));
+                    this.shards.forEach(s => s.draw(ctx));
+                    ctx.restore();
+                }
+
+                isDead() { return this.fadeOut >= 1; }
+            }
+
+            let breaks = [];
+            let nextBreak = 50;
+
+            function loop() {
+                ctx.clearRect(0, 0, W, H);
+
+                nextBreak--;
+                if (nextBreak <= 0 && breaks.length < MAX_CONCURRENT) {
+                    breaks.push(new IceBreak());
+                    nextBreak = 110 + Math.floor(Math.random() * 100);
+                }
+
+                breaks = breaks.filter(b => !b.isDead());
+                breaks.forEach(b => { b.update(); b.draw(ctx); });
+                requestAnimationFrame(loop);
+            }
+
+            // stagger first breaks so it doesn't spike on load
+            setTimeout(() => breaks.push(new IceBreak()), 400);
+            setTimeout(() => breaks.push(new IceBreak()), 1400);
+            requestAnimationFrame(loop);
+        })();
+
+
+        // ═══════════════════════════════════════════════════════
+        // TYPEWRITER — cycling headlines
+        // ═══════════════════════════════════════════════════════
+        (function () {
+            const lines = [
+                { text: "crack the surface. own the depth.", hl: "crack the surface" },
+                { text: "where the ice breaks, the code begins.", hl: "ice breaks" },
+                { text: "built in the cold. breaking through.", hl: "breaking through" },
+            ];
+
+            const el = document.getElementById('typed-text');
+            let idx = 0, pos = 0, deleting = false, paused = 0;
+
+            function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+            function render(text, li) {
+                const hl = lines[li].hl;
+                const i = text.toLowerCase().indexOf(hl.toLowerCase());
+                if (i !== -1 && i + hl.length <= text.length) {
+                    el.innerHTML =
+                        esc(text.slice(0, i)) +
+                        '<span class="ice">' + esc(text.slice(i, i + hl.length)) + '</span>' +
+                        esc(text.slice(i + hl.length));
+                } else {
+                    el.textContent = text;
+                }
+            }
+
+            function tick() {
+                const full = lines[idx].text;
+                if (paused > 0) { paused--; setTimeout(tick, 30); return; }
+                if (!deleting) {
+                    pos++;
+                    render(full.slice(0, pos), idx);
+                    if (pos >= full.length) { deleting = true; paused = Math.round(2600 / 30); setTimeout(tick, 30); }
+                    else setTimeout(tick, 44 + Math.random() * 26);
+                } else {
+                    pos--;
+                    render(full.slice(0, pos), idx);
+                    if (pos <= 0) { deleting = false; idx = (idx + 1) % lines.length; paused = Math.round(380 / 30); setTimeout(tick, 30); }
+                    else setTimeout(tick, 18);
+                }
+            }
+
+            setTimeout(tick, 1100);
+        })();
+    </script>
+</body>
+
+</html>
